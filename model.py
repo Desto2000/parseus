@@ -52,8 +52,17 @@ class TransformerVAEStaticHead(nn.Module):
         self.fc_mu = nn.Linear(combined_embed_dim, latent_dim)
         self.fc_logvar = nn.Linear(combined_embed_dim, latent_dim)
 
+        # --- Attention Decoder Components ---
+        # Project latent vector 'z' to the dimension of encoder outputs for attention query
+        self.fc_z_proj = nn.Linear(latent_dim, combined_embed_dim)
+        # Attention mechanism
+        self.attention = nn.MultiheadAttention(embed_dim=combined_embed_dim,
+                                               num_heads=transformer_nhead, # Use same number of heads as encoder
+                                               batch_first=True)
+        # --- End Attention Decoder Components ---
+
         # Decoder
-        self.decoder_fc1 = nn.Linear(latent_dim, hidden_dim_dec // 2)
+        self.decoder_fc1 = nn.Linear(latent_dim + combined_embed_dim, hidden_dim_dec // 2)
         self.decoder_fc2 = nn.Linear(hidden_dim_dec // 2, hidden_dim_dec)
         self.decoder_fc_out = nn.Linear(hidden_dim_dec, num_questions)
 
@@ -89,7 +98,7 @@ class TransformerVAEStaticHead(nn.Module):
 
         mu = self.fc_mu(pooled_output)
         logvar = self.fc_logvar(pooled_output)
-        return mu, logvar
+        return mu, logvar, transformer_output
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
@@ -104,9 +113,33 @@ class TransformerVAEStaticHead(nn.Module):
 
     def forward(self, answers, categories_tensor):
         combined_embed = self._get_combined_embeddings(answers, categories_tensor)
-        mu, logvar = self.encode(combined_embed)
+        mu, logvar, encoder_outputs = self.encode(combined_embed)
         z = self.reparameterize(mu, logvar)
-        recon_logits = self.decode(z)
-        predicted_static_dist_logits = self.static_pred_head(mu) # Predict from mu
+        # 4. Prepare for Attention Decoder
+        # Project z to match encoder output dimension for the query
+        query = self.fc_z_proj(z) # Shape: [B, CombinedEmbedDim]
+        # Add sequence dimension for MultiheadAttention: [B, 1, CombinedEmbedDim]
+        query = query.unsqueeze(1)
 
+        # 5. Apply Attention
+        # Query: Projected z [B, 1, CombinedEmbedDim]
+        # Key: Encoder outputs [B, NumQuestions, CombinedEmbedDim]
+        # Value: Encoder outputs [B, NumQuestions, CombinedEmbedDim]
+        context_vector, attn_weights = self.attention(query=query,
+                                                      key=encoder_outputs,
+                                                      value=encoder_outputs)
+        # Output context_vector shape: [B, 1, CombinedEmbedDim]
+        # Remove the sequence dimension: [B, CombinedEmbedDim]
+        context_vector = context_vector.squeeze(1)
+
+        # 6. Combine z and context for Decoder input
+        decoder_input = torch.cat((z, context_vector), dim=1) # Shape: [B, LatentDim + CombinedEmbedDim]
+
+        # 7. Decode
+        recon_logits = self.decode(decoder_input)
+
+        # 8. Predict Static Distribution (from mu)
+        predicted_static_dist_logits = self.static_pred_head(mu)
+
+        # Return same signature as before for compatibility with train/analysis
         return recon_logits, mu, logvar, predicted_static_dist_logits
