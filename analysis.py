@@ -7,15 +7,17 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 from sklearn.decomposition import PCA
-from sklearn.metrics import accuracy_score, adjusted_rand_score, mean_squared_error
+from sklearn.metrics import accuracy_score, adjusted_rand_score, mean_squared_error, top_k_accuracy_score
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.metrics import (precision_score, recall_score, f1_score,
                                 roc_curve, roc_auc_score,
                                 average_precision_score, precision_recall_curve)
 from scipy.stats import pearsonr, spearmanr
-from sklearn.metrics import r2_score
+from sklearn.metrics import r2_score, pairwise_distances, pairwise_distances_chunked
 import plotly.graph_objects as go
+from torch.nn.functional import kl_div
+import torch.nn.functional as F
 from tqdm import tqdm
 
 
@@ -124,10 +126,14 @@ def run_analysis(model, full_loader, answers_data, question_categories_data, cat
     recon_binary_np = (recon_probs_np > 0.5).astype(int)
     accuracy = accuracy_score(original_answers_np.flatten(), recon_binary_np.flatten())
     print(f"Overall Reconstruction Accuracy: {accuracy:.4f}")
+    print(torch.tensor(predicted_static_logits_np).shape)
 
     # Static Distribution Prediction MSE (Logits vs Ground Truth Distribution)
-    static_pred_mse = mean_squared_error(predicted_static_logits_np, static_distributions_np_gt)
-    print(f"Static Prediction MSE (logits vs target dist): {static_pred_mse:.4f}")
+    static_pred_kld = kl_div(torch.log(torch.tensor(predicted_static_logits_np)),
+                             torch.tensor(static_distributions_np_gt),
+                             log_target=False,
+                             reduction='batchmean')
+    print(f"Static Prediction KL-D (logits vs target dist): {static_pred_kld:.4f}")
 
     # Clustering Alignment (K-Means on mu vs. Dominant Static Category)
     print(f"\nComparing K-Means ({config.N_CLUSTERS_EVAL} clusters on mu):")

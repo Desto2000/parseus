@@ -67,7 +67,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    answers_data, _ = data.load_and_process_csv_data("data/dataset.csv")
+    answers_data, participant_info = data.load_and_process_csv_data("data/dataset.csv")
     question_categories_data = torch.tensor([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5])
     config.NUM_SAMPLES = answers_data.shape[0]
 
@@ -81,6 +81,22 @@ if __name__ == "__main__":
     )
     # Keep categories_tensor on CPU, model will move it to device as needed
     categories_tensor = question_categories_data # Used as input to model embedding
+
+    CATEGORY_NAMES = ['R', 'I', 'A', 'S', 'E', 'C']
+
+    visualize_category_distributions(
+        target_static_distributions,
+        predicted_distributions=None,  # Replace with predicted_distributions when you have a model
+        category_names=CATEGORY_NAMES
+    )
+
+    # Save processed data
+    torch.save({
+        'answers_data': answers_data,
+        'target_distributions': target_static_distributions,
+        'question_categories': question_categories_data,
+        'participant_info': participant_info,
+    }, 'processed_data.pt')
 
 
     # 3. Initialize Model and Optimizer

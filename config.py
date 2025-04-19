@@ -13,8 +13,8 @@ HIDDEN_DIM_DEC = 64 # Hidden dimension for decoder MLP layers
 HIDDEN_DIM_STATIC_HEAD = 32 # Hidden dimension for static prediction head
 
 # --- Transformer Specific Hyperparameters ---
-TRANSFORMER_NHEAD = 4       # Number of attention heads
-TRANSFORMER_NLAYERS = 2     # Number of encoder layers
+TRANSFORMER_NHEAD = 32       # Number of attention heads
+TRANSFORMER_NLAYERS = 4     # Number of encoder layers
 TRANSFORMER_DIM_FEEDFORWARD = 128 # Dimension of feedforward network in Transformer
 
 # Training parameters
@@ -24,6 +24,7 @@ BATCH_SIZE = 16
 BETA = 1.0         # Weight for KL divergence loss (VAE regularization)
 GAMMA = 1.0        # Weight for static distribution prediction loss (MSE) - TUNABLE
 ALPHA = 1.0        # Weight for reconstruction loss (BCE) - TUNABLE
+THETA = 2.0        # Focal loss parameter - TUNABLE
 
 # Analysis parameters
 N_CLUSTERS_EVAL = NUM_CATEGORIES # Number of clusters for K-Means eval on latent space

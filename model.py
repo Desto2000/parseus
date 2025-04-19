@@ -23,6 +23,50 @@ class PositionalEncoding(nn.Module):
         x = x + self.pe[:x.size(0)]
         return self.dropout(x)
 
+class SwigGLU(nn.Module):
+    """
+    Swish-Gated Linear Unit (SwiGLU) module.
+
+    This implements the SwiGLU activation as described in papers like "GLU Variants Improve Transformer"
+    but using Swish (SiLU) activation instead of Sigmoid for the gating mechanism.
+
+    The computation performed is:
+        SwiGLU(x, W, V, b, c) = SiLU(xW + b) ⊗ (xV + c)
+    where ⊗ is element-wise multiplication.
+    """
+
+    def __init__(self, dim):
+        """
+        Initialize the SwiGLU module.
+
+        Args:
+            dim (int): Input and Output dimension.
+        """
+        super(SwigGLU, self).__init__()
+
+        # Create two linear projections - one for the gate and one for the value
+        self.gate_proj = nn.Linear(dim, dim, bias=False)
+        self.value_proj = nn.Linear(dim, dim, bias=False)
+
+    def forward(self, x):
+        """
+        Forward pass through the SwiGLU module.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape [batch_size, ..., input_dim]
+
+        Returns:
+            torch.Tensor: Output tensor of shape [batch_size, ..., output_dim]
+        """
+        # Gate branch - apply SiLU activation (Swish)
+        gate = F.silu(self.gate_proj(x))
+
+        # Value branch - linear projection
+        value = self.value_proj(x)
+
+        # Element-wise multiplication
+        return gate * value
+
 class TransformerVAEStaticHead(nn.Module):
     def __init__(self, num_questions, num_categories, embed_dim, latent_dim,
                  hidden_dim_dec, hidden_dim_static_head,
@@ -39,6 +83,8 @@ class TransformerVAEStaticHead(nn.Module):
         self.category_embedding = nn.Embedding(num_categories, embed_dim)
         combined_embed_factor = 3
         combined_embed_dim = embed_dim * combined_embed_factor
+
+        self.category_relations = nn.Parameter(torch.eye(num_categories), requires_grad=True)
 
         # Positional Encoding
         self.pos_encoder = PositionalEncoding(combined_embed_dim, max_len=num_questions)
@@ -69,11 +115,9 @@ class TransformerVAEStaticHead(nn.Module):
         # Static Prediction Head (takes mu as input)
         self.static_pred_head = nn.Sequential(
             nn.Linear(latent_dim, hidden_dim_static_head),
-            nn.ReLU(),
+            SwigGLU(hidden_dim_static_head),
             nn.Linear(hidden_dim_static_head, num_categories),
-            # No final activation, raw logits for MSE or CE loss later
-            # If using CE loss on predicted category, add LogSoftmax
-            # If predicting distribution for MSE, keep as logits or use Softmax if target is normalized
+            nn.Softmax(dim=1)  # Softmax for static distribution prediction
         )
 
     def _get_combined_embeddings(self, answers, categories_tensor):
