@@ -10,6 +10,11 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import accuracy_score, adjusted_rand_score, mean_squared_error
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.metrics import (precision_score, recall_score, f1_score,
+                                roc_curve, roc_auc_score,
+                                average_precision_score, precision_recall_curve)
+from scipy.stats import pearsonr, spearmanr
+from sklearn.metrics import r2_score
 import plotly.graph_objects as go
 from tqdm import tqdm
 
@@ -151,6 +156,80 @@ def run_analysis(model, full_loader, answers_data, question_categories_data, cat
             print("Skipping K-Means/ARI: Not enough clusters possible.")
             ari_score = np.nan
             kmeans_centers = None
+
+    # Then modify the run_analysis function to add the new metrics section
+    # Add after line 125 (after calculating current metrics)
+
+    # Binary Classification Metrics for Reconstruction
+    print("\n--- Detailed Reconstruction Metrics ---")
+    precision = precision_score(original_answers_np.flatten(), recon_binary_np.flatten())
+    recall = recall_score(original_answers_np.flatten(), recon_binary_np.flatten())
+    f1 = f1_score(original_answers_np.flatten(), recon_binary_np.flatten())
+    print(f"Reconstruction Precision: {precision:.4f}")
+    print(f"Reconstruction Recall (Sensitivity): {recall:.4f}")
+    print(f"Reconstruction F1 Score: {f1:.4f}")
+
+    # ROC and Precision-Recall Metrics
+    auroc = roc_auc_score(original_answers_np.flatten(), recon_probs_np.flatten())
+    print(f"Reconstruction AUROC: {auroc:.4f}")
+
+    # Calculate ROC curve points
+    fpr, tpr, thresholds = roc_curve(original_answers_np.flatten(), recon_probs_np.flatten())
+
+    # Find sensitivity at specific specificity levels
+    for target_spec in [0.9, 0.95, 0.99]:
+        specificity = 1 - fpr
+        idx = np.argmin(np.abs(specificity - target_spec))
+        sensitivity_at_specificity = tpr[idx]
+        threshold_at_target = thresholds[idx]
+        print(f"Sensitivity at {target_spec:.2f} Specificity: {sensitivity_at_specificity:.4f} (threshold: {threshold_at_target:.4f})")
+
+    # Average Precision
+    average_precision = average_precision_score(original_answers_np.flatten(), recon_probs_np.flatten())
+    print(f"Average Precision: {average_precision:.4f}")
+
+    # Plot Precision-Recall curve
+    precision_values, recall_values, _ = precision_recall_curve(original_answers_np.flatten(), recon_probs_np.flatten())
+    plt.figure(figsize=(8, 6))
+    plt.plot(recall_values, precision_values, color='blue', lw=2)
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title('Precision-Recall Curve (AP={:.4f})'.format(average_precision))
+    plt.grid(True)
+    plt.savefig(config.PLOT_FILENAME_PR_CURVE)
+    print(f"Saved Precision-Recall curve to {config.PLOT_FILENAME_PR_CURVE}")
+    plt.close()
+
+    # ROC Curve
+    plt.figure(figsize=(8, 6))
+    plt.plot(fpr, tpr, color='blue', lw=2)
+    plt.plot([0, 1], [0, 1], color='gray', linestyle='--')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('ROC Curve (AUC={:.4f})'.format(auroc))
+    plt.grid(True)
+    plt.savefig(config.PLOT_FILENAME_ROC_CURVE)
+    print(f"Saved ROC curve to {config.PLOT_FILENAME_ROC_CURVE}")
+    plt.close()
+
+    # Static Distribution Evaluation
+    print("\n--- Detailed Static Distribution Metrics ---")
+    # Convert logits to probabilities for better comparison
+    predicted_static_probs_np = torch.softmax(model_outputs["predicted_static_logits"], dim=1).numpy()
+
+    # Category-wise correlation
+    category_correlations = []
+    for cat in range(config.NUM_CATEGORIES):
+        pearson_corr, _ = pearsonr(static_distributions_np_gt[:, cat], predicted_static_probs_np[:, cat])
+        category_correlations.append(pearson_corr)
+        print(f"Category {cat} Pearson correlation: {pearson_corr:.4f}")
+
+    avg_category_correlation = np.mean(category_correlations)
+    print(f"Average category-wise Pearson correlation: {avg_category_correlation:.4f}")
+
+    # R-squared for overall distribution fit
+    r2 = r2_score(static_distributions_np_gt.flatten(), predicted_static_probs_np.flatten())
+    print(f"Static Distribution R-squared: {r2:.4f}")
 
 
     # 4. Side-by-Side Vector Comparison

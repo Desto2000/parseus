@@ -1,6 +1,8 @@
 # data.py
 """ Data generation and loading utilities """
+import os
 
+import pandas as pd
 import torch
 import torch.distributions as dist
 from torch.utils.data import TensorDataset, DataLoader
@@ -60,6 +62,7 @@ def calculate_target_static_distributions(answers_data, question_categories_data
             static_distributions_all[i] /= num_yes
         # else: defaults to zeros
     print("Target static distributions calculated.")
+    print(static_distributions_all[0:5])  # Print first 5 for verification
     return static_distributions_all
 
 def prepare_dataloaders(answers_data, target_static_distributions, batch_size):
@@ -73,3 +76,99 @@ def prepare_dataloaders(answers_data, target_static_distributions, batch_size):
     full_loader = DataLoader(eval_dataset, batch_size=batch_size, shuffle=False) # No shuffle for consistent eval order
 
     return train_loader, full_loader
+
+def load_and_process_csv_data(csv_file_path):
+    """
+    Load and process real data from CSV file
+
+    Parameters:
+    csv_file_path (str): Path to the CSV file containing survey responses
+    num_categories (int): Number of categories (default is 6 for RIASEC)
+
+    Returns:
+    tuple: (answers_data, question_categories_data, participant_info)
+    """
+    # Load the CSV file
+    print(f"Loading data from {csv_file_path}...")
+    df = pd.read_csv(csv_file_path)
+
+    # Extract participant information
+    participant_info = df[['name', 'student_id', 'timestamp']].copy()
+
+    # Extract question responses (q1 to q30)
+    question_columns = [col for col in df.columns if col.startswith('q')]
+    answer_df = df[question_columns]
+
+    # Convert to torch tensor
+    answers_data = torch.tensor(answer_df.values, dtype=torch.int)
+    num_samples, num_questions = answers_data.shape
+
+    print(f"Loaded {num_samples} participants with {num_questions} questions each")
+
+    # Calculate overall "Yes" percentage
+    print(f"Overall 'Yes' percentage: {answers_data.float().mean().item()*100:.2f}%")
+
+    return answers_data, participant_info
+
+def merge_csv_files_and_process(csv_files, output_path='merged_data.csv', num_categories=6, batch_size=32):
+    """
+    Merge multiple CSV files and process the data for the Parseus model
+
+    Parameters:
+    csv_files (list): List of CSV file paths to merge
+    output_path (str): Path to save the merged CSV file
+    num_categories (int): Number of categories for classification
+    batch_size (int): Batch size for dataloaders
+
+    Returns:
+    tuple: (train_loader, full_loader, answers_data, target_distributions, participant_info)
+    """
+    # Merge CSV files if multiple are provided
+    if len(csv_files) > 1:
+        print(f"Merging {len(csv_files)} CSV files...")
+        df_list = []
+        for file in csv_files:
+            if not os.path.exists(file):
+                print(f"Warning: File {file} does not exist and will be skipped")
+                continue
+            try:
+                df = pd.read_csv(file)
+                df_list.append(df)
+                print(f"Successfully read {file} with {df.shape[0]} rows")
+            except Exception as e:
+                print(f"Error reading {file}: {str(e)}")
+
+        if not df_list:
+            raise ValueError("No valid CSV files could be read")
+
+        # Concatenate all dataframes
+        merged_df = pd.concat(df_list, ignore_index=True)
+
+        # Save the merged dataframe to a CSV file
+        merged_df.to_csv(output_path, index=False)
+        print(f"Merged data saved to {output_path}")
+
+        # Process the merged data
+        answers_data, question_categories_data, participant_info = load_and_process_csv_data(output_path, num_categories)
+    else:
+        # Process the single CSV file
+        answers_data, question_categories_data, participant_info = load_and_process_csv_data(csv_files[0], num_categories)
+
+    # Calculate target distributions
+    num_samples = answers_data.shape[0]
+    target_distributions = calculate_target_static_distributions(
+        answers_data,
+        question_categories_data,
+        num_samples,
+        num_categories
+    )
+
+    # Prepare dataloaders for training and evaluation
+    train_loader, full_loader = prepare_dataloaders(
+        answers_data,
+        target_distributions,
+        batch_size
+    )
+
+    return train_loader, full_loader, answers_data, target_distributions, participant_info, question_categories_data
+

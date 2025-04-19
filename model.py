@@ -137,6 +137,8 @@ class TransformerVAEStaticHead(nn.Module):
 
         # 7. Decode
         recon_logits = self.decode(decoder_input)
+        _ = F.kl_div(F.log_softmax(recon_logits, dim=-1), F.log_softmax(attn_weights, dim=-1),
+                       reduction='batchmean', log_target=True)
 
         # 8. Predict Static Distribution (from mu)
         predicted_static_dist_logits = self.static_pred_head(mu)

@@ -8,7 +8,7 @@ import time
 
 def loss_function(recon_logits, answers, mu, logvar,
                   predicted_static_dist_logits, target_static_dist,
-                  beta, gamma):
+                  beta, gamma, alpha):
     """
     Calculates the combined VAE loss: BCE + KLD + Static MSE.
     Args:
@@ -20,6 +20,7 @@ def loss_function(recon_logits, answers, mu, logvar,
         target_static_dist: Ground truth static distributions (normalized).
         beta: Weight for KLD loss.
         gamma: Weight for Static MSE loss.
+        alpha: Weight for BCE loss.
     Returns:
         Tuple: (total_loss, BCE, KLD, Static_MSE)
     """
@@ -33,13 +34,19 @@ def loss_function(recon_logits, answers, mu, logvar,
     # Alternative: Use MSE on softmax(predicted_logits) vs normalized target
     # Alternative: Use KLDivLoss on log_softmax(predicted_logits) vs normalized target
     # Using simple MSE on logits for now, assuming target is normalized [0,1]
-    Static_MSE = F.mse_loss(predicted_static_dist_logits, target_static_dist, reduction='sum')
+    # Static_HEL = F.hinge_embedding_loss(predicted_static_dist_logits, 2 * target_static_dist - 1, reduction='mean')
+    # Static_MSE = F.mse_loss(predicted_static_dist_logits, target_static_dist, reduction='sum')
+    Static_KLD = F.kl_div(
+        F.log_softmax(predicted_static_dist_logits, dim=1),
+        target_static_dist,
+        reduction='sum'
+    )
 
     # Total Loss
-    total_loss = BCE + beta * KLD + gamma * Static_MSE
+    total_loss = BCE * alpha + beta * KLD + gamma * Static_KLD
 
     # Return components for logging (per batch sum)
-    return total_loss, BCE, KLD, Static_MSE
+    return total_loss, BCE, KLD, Static_KLD
 
 
 def train_model(model, train_loader, categories_tensor, optimizer, config, device):
@@ -52,9 +59,11 @@ def train_model(model, train_loader, categories_tensor, optimizer, config, devic
     num_epochs = config.NUM_EPOCHS
     beta = config.BETA
     gamma = config.GAMMA
+    alpha = config.ALPHA
 
     for epoch in range(num_epochs):
-        total_loss_epoch, total_bce_epoch, total_kld_epoch, total_static_epoch = 0.0, 0.0, 0.0, 0.0
+        total_loss_epoch, total_bce_epoch, total_kld_epoch, total_static_epoch, total_kll_epoch = (0.0, 0.0, 0.0, 0.0,
+                                                                                                   0.0)
 
         # Use tqdm for progress bar
         pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}", leave=False)
@@ -66,10 +75,10 @@ def train_model(model, train_loader, categories_tensor, optimizer, config, devic
             recon_logits, mu, logvar, predicted_static_logits = model(answers_batch, categories_tensor)
 
             # Calculate loss
-            loss, bce, kld, static_mse = loss_function(
+            loss, bce, kld, static_kld = loss_function(
                 recon_logits, answers_batch, mu, logvar,
                 predicted_static_logits, static_dist_batch,
-                beta, gamma
+                beta, gamma, alpha
             )
 
             # Backward pass and optimization
@@ -83,14 +92,16 @@ def train_model(model, train_loader, categories_tensor, optimizer, config, devic
             total_loss_epoch += loss.item()
             total_bce_epoch += bce.item()
             total_kld_epoch += kld.item()
-            total_static_epoch += static_mse.item()
+            total_static_epoch += static_kld.item()
+            # total_kll_epoch += kll.item()
 
             # Update progress bar description (optional)
             pbar.set_postfix({
                 'Loss': f"{loss.item()/len(answers_batch):.4f}",
                 'BCE': f"{bce.item()/len(answers_batch):.4f}",
                 'KLD': f"{kld.item()/len(answers_batch):.4f}",
-                'Static': f"{static_mse.item()/len(answers_batch):.4f}"
+                'Static': f"{static_kld.item()/len(answers_batch):.4f}",
+                # 'KLL': f"{kll.item()/len(answers_batch):.4f}"
             })
 
         # Calculate average losses per sample for the epoch
@@ -99,9 +110,14 @@ def train_model(model, train_loader, categories_tensor, optimizer, config, devic
         avg_bce = total_bce_epoch / num_samples_in_loader
         avg_kld = total_kld_epoch / num_samples_in_loader
         avg_static = total_static_epoch / num_samples_in_loader
-
-        print(f"Epoch [{epoch+1}/{num_epochs}], Avg Loss: {avg_loss:.4f} "
-              f"(BCE: {avg_bce:.4f}, KLD: {avg_kld:.4f}, StaticMSE: {avg_static:.4f})")
+        # avg_kll = total_kll_epoch / num_samples_in_loader
+        print(f" - "
+              f"Avg Loss: {avg_loss:.4f}, "
+              f"BCE: {avg_bce:.4f}, "
+              f"KLD: {avg_kld:.4f}, "
+              f"Static KLD: {avg_static:.4f}, "
+              # f"KLL: {avg_kll:.4f}"
+              )
 
     end_time = time.time()
     print(f"--- Training Finished (Duration: {end_time - start_time:.2f} sec) ---")
