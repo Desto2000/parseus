@@ -49,7 +49,7 @@ def loss_function(recon_logits, answers, mu, logvar,
     fl = focal_loss(predicted_probs, target_static_dist, theta)
 
     # Total Loss
-    total_loss = alpha * BCE + beta * KLD + gamma * static_KLD + 0 * entropy_loss + 0 * fl
+    total_loss = alpha * BCE + beta * KLD + gamma * static_KLD
 
     return total_loss, BCE, KLD, static_KLD, entropy_loss, fl
 

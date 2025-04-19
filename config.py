@@ -13,9 +13,9 @@ HIDDEN_DIM_DEC = 64 # Hidden dimension for decoder MLP layers
 HIDDEN_DIM_STATIC_HEAD = 32 # Hidden dimension for static prediction head
 
 # --- Transformer Specific Hyperparameters ---
-TRANSFORMER_NHEAD = 32       # Number of attention heads
+TRANSFORMER_NHEAD = 16       # Number of attention heads
 TRANSFORMER_NLAYERS = 4     # Number of encoder layers
-TRANSFORMER_DIM_FEEDFORWARD = 128 # Dimension of feedforward network in Transformer
+TRANSFORMER_DIM_FEEDFORWARD = 64 # Dimension of feedforward network in Transformer
 
 # Training parameters
 LEARNING_RATE = 1e-3
@@ -32,7 +32,7 @@ NUM_VECTORS_COMPARE = 10       # How many samples for side-by-side vector compar
 
 # --- File names ---
 # Model Save Path
-MODEL_SAVE_PATH = "transformer_vae_static_model.pth" # <<< ADD THIS LINE
+MODEL_SAVE_PATH = "transformer_vae_static_model.pth"
 
 # File names for saving results
 PLOT_FILENAME_2D = "transformer_vae_static_analysis_2d.png"
