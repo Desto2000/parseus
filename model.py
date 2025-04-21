@@ -1,4 +1,3 @@
-# model.py
 """ Model definition for Transformer VAE with Static Prediction Head """
 
 import torch
@@ -84,8 +83,6 @@ class TransformerVAEStaticHead(nn.Module):
         combined_embed_factor = 3
         combined_embed_dim = embed_dim * combined_embed_factor
 
-        self.category_relations = nn.Parameter(torch.eye(num_categories), requires_grad=True)
-
         # Positional Encoding
         self.pos_encoder = PositionalEncoding(combined_embed_dim, max_len=num_questions)
 
@@ -116,6 +113,8 @@ class TransformerVAEStaticHead(nn.Module):
         self.static_pred_head = nn.Sequential(
             nn.Linear(latent_dim, hidden_dim_static_head),
             SwigGLU(hidden_dim_static_head),
+            nn.Linear(hidden_dim_static_head, hidden_dim_static_head),
+            nn.ReLU(),
             nn.Linear(hidden_dim_static_head, num_categories),
             nn.Softmax(dim=1)  # Softmax for static distribution prediction
         )
@@ -181,8 +180,6 @@ class TransformerVAEStaticHead(nn.Module):
 
         # 7. Decode
         recon_logits = self.decode(decoder_input)
-        _ = F.kl_div(F.log_softmax(recon_logits, dim=-1), F.log_softmax(attn_weights, dim=-1),
-                       reduction='batchmean', log_target=True)
 
         # 8. Predict Static Distribution (from mu)
         predicted_static_dist_logits = self.static_pred_head(mu)

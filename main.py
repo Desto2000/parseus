@@ -1,4 +1,3 @@
-# main.py
 """ Main script to run the Transformer VAE + Static Head experiment """
 
 import torch
@@ -56,9 +55,9 @@ def visualize_category_distributions(target_distributions, predicted_distributio
             axs[i, 0].legend()
 
     plt.tight_layout()
-    plt.savefig('category_distributions.png')
+    plt.savefig('out/category_distributions.png')
     plt.close()
-    print("Visualization saved to 'category_distributions.png'")
+    print("Visualization saved to 'out/category_distributions.png'")
 
 if __name__ == "__main__":
     start_run_time = time.time()
@@ -96,7 +95,7 @@ if __name__ == "__main__":
         'target_distributions': target_static_distributions,
         'question_categories': question_categories_data,
         'participant_info': participant_info,
-    }, 'processed_data.pt')
+    }, 'data/processed_data.pt')
 
 
     # 3. Initialize Model and Optimizer
@@ -115,9 +114,7 @@ if __name__ == "__main__":
     optimizer = optim.Adam(personality_model.parameters(), lr=config.LEARNING_RATE)
 
     # 4. Train Model
-    train.train_model(
-        personality_model, train_loader, categories_tensor, optimizer, config, device
-    )
+    train.train_model(personality_model, train_loader, categories_tensor, optimizer, config, device)
 
     # 5. Run Analysis
     # Note: Pass original answers_data and question_categories_data for ground truth calculation in analysis

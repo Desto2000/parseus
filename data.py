@@ -1,4 +1,3 @@
-# data.py
 """ Data generation and loading utilities """
 import os
 

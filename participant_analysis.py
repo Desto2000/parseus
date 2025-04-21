@@ -12,6 +12,7 @@ import argparse
 
 # Import from existing modules
 import config
+import train
 from model import TransformerVAEStaticHead
 from data import calculate_target_static_distributions, prepare_dataloaders
 from analysis import calculate_static_distributions_ground_truth
@@ -91,7 +92,7 @@ def load_or_train_model(answers_data, question_categories_data, device, model_pa
 
         # Train model
         optimizer = optim.Adam(personality_model.parameters(), lr=config.LEARNING_RATE)
-        train_model(personality_model, train_loader, question_categories_data, optimizer, config, device)
+        train.train_model(personality_model, train_loader, question_categories_data, optimizer, config, device)
 
         # Save trained model
         if model_path:

@@ -1,4 +1,3 @@
-# analysis.py
 """ Analysis, evaluation, and plotting functions """
 
 import torch
@@ -6,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, TruncatedSVD
 from sklearn.metrics import accuracy_score, adjusted_rand_score, mean_squared_error, top_k_accuracy_score
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import cosine_similarity
@@ -281,6 +280,34 @@ def run_analysis(model, full_loader, answers_data, question_categories_data, cat
         plt.suptitle('Transformer VAE + Static Head Analysis', fontsize=16)
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         plt.savefig(config.PLOT_FILENAME_2D)
+        print(f"Saved 2D analysis plots to {config.PLOT_FILENAME_2D}")
+        plt.close(fig) # Close the figure
+
+        pca_2d = TruncatedSVD(n_components=2, random_state=42)
+        mu_reduced_2d = pca_2d.fit_transform(mu_to_reduce)
+        static_reduced_2d = pca_2d.fit_transform(static_to_reduce) # Use same PCA object or fit separately? Fit separately usually better.
+        pca_2d_static = TruncatedSVD(n_components=2, random_state=42)
+        static_reduced_2d = pca_2d_static.fit_transform(static_to_reduce)
+
+
+        fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+        # Plot 1: Latent Space (mu) colored by GT Static Category
+        scatter1 = axes[0].scatter(mu_reduced_2d[:, 0], mu_reduced_2d[:, 1], c=colors_gt, cmap='viridis', alpha=0.7, s=15)
+        axes[0].set_title(f'VAE Latent Space (mu) ({config.LATENT_DIM}D -> 2D SVD)\nColored by Dominant Static '
+                          f'Category (GT)')
+        axes[0].set_xlabel("SVD Component 1"); axes[0].set_ylabel("SVD Component 2")
+        legend1 = axes[0].legend(*scatter1.legend_elements(num=config.NUM_CATEGORIES), title="Static Cat.")
+        axes[0].add_artist(legend1)
+        # Plot 2: Static Distributions colored by GT Static Category
+        scatter2 = axes[1].scatter(static_reduced_2d[:, 0], static_reduced_2d[:, 1], c=colors_gt, cmap='viridis', alpha=0.7, s=15)
+        axes[1].set_title(f'Static Distributions (GT) ({config.NUM_CATEGORIES}D -> 2D SVD)\nColored by Dominant Static '
+                          f'Category (GT)')
+        axes[1].set_xlabel("SVD Component 1"); axes[1].set_ylabel("SVD Component 2")
+        legend2 = axes[1].legend(*scatter2.legend_elements(num=config.NUM_CATEGORIES), title="Static Cat.")
+        axes[1].add_artist(legend2)
+        plt.suptitle('Transformer VAE + Static Head Analysis', fontsize=16)
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        plt.savefig(config.PLOT_FILENAME_2D2)
         print(f"Saved 2D analysis plots to {config.PLOT_FILENAME_2D}")
         plt.close(fig) # Close the figure
 
